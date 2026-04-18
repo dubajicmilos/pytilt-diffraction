@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytilt-diffraction"
+version = "0.1.0"
+description = "Interactive single-crystal diffraction simulator for Glazer-tilted perovskites"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-2.0-or-later" }
+authors = [{ name = "Milos Dubajic" }]
+dependencies = [
+    "numpy>=1.22",
+    "matplotlib>=3.5",
+    "ase>=3.22",
+]
+
+[project.optional-dependencies]
+validation = ["diffsims>=0.6"]
+
+[project.scripts]
+pytilt-gui = "pytilt_diffraction.simulator:main"
+
+[tool.setuptools.packages.find]
+include = ["pytilt_diffraction*"]
+exclude = ["vendor*", "tests*", "examples*"]

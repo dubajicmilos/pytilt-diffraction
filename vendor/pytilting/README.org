@@ -1,0 +1,20 @@
+* PyTilting
+
+** Doc
+
+Documentation can be found at https://dwang5.github.io/PyTiltingDoc/
+
+
+
+** Development
+- June 2, 2025: Fixed a problem for generating certain phases (e.g., Pbam) for large suprecells (e.g., 12*12*12). The problem is due to a precision of numerical calculation. I also changed the way how the spacegroup number is found to be compitable with the lastest ASE.
+- Apr 30, 2021: Change the part regarding how the tiltings and displacments shall be done in each PUC, given the Glazer notation and 'k_u'.
+
+** License
+
+This work is released under the GPL license. In addition, if you use the code here it is necessary to cite the following paper
+
+- "Generation of low-symmetry perovskite structures for firsts-principles computation”, by N. Xie, _et al_ J. Phys.: Condens. Matter *32*, 315901 (2020).
+
+** Contact
+- D. Wang: dwang5@zoho.com

@@ -1,0 +1,6 @@
+*.pyc
+_build
+.*.swp
+*.cif
+\#*\#
+.snapshots

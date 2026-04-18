@@ -1,0 +1,50 @@
+# 指定一个 Python 官方 Docker 镜像作为基础环境
+# 推荐使用 LTS (长期支持) 版本的 Python，例如 3.9 或 3.10
+# -slim 版本通常更小，包含必要的运行时，适合 CI/CD
+image: python:3.9-slim-buster
+
+# 定义 CI/CD 阶段
+# build: 用于安装依赖
+# test: 用于运行测试
+# 可以根据你的实际需求添加更多阶段，例如 deploy
+stages:
+  - build
+  - test
+
+# 定义一个缓存，以加快后续运行的速度
+# 缓存 pip 安装的包，避免每次运行都重新下载
+cache:
+  paths:
+    - .cache/pip # 默认情况下 pip 会将包缓存到这里，或者你可以指定虚拟环境的 site-packages 目录
+
+# 构建阶段：安装依赖
+build_job:
+  stage: build
+  script:
+    # 确保 pip 和 setuptools 是最新版本，这是良好实践
+    - pip install --upgrade pip setuptools wheel
+    # 安装你的项目所需的 Python 依赖
+    - mkdir -p .python_dependencies # 创建一个目录来存储依赖
+
+    # 如果你的项目有 requirements.txt 文件，就这样做
+    #- pip install -r requirements.txt
+    # 如果你的项目没有 requirements.txt，但明确知道需要 ASE，可以直接安装
+    # 注意：如果你的项目是私有包或有特殊安装步骤，可能需要调整此命令
+    - pip install --target=.python_dependencies ase # 将numpy安装到这个目录
+  artifacts:
+    paths:
+      - .python_dependencies/ # 将这个目录作为artifact上传
+    expire_in: 1 hour # 设置artifact的过期时间
+
+# 测试阶段：运行测试
+run_tests:
+  stage: test
+  script:
+    - export PYTHONPATH=$(pwd)/.python_dependencies:$(pwd)/src/:$PYTHONPATH # 将artifact的路径添加到PYTHONPATH
+    # 运行你的测试命令
+    # 假设你的测试脚本是 test.py 或者你使用 pytest
+    #- python -m pytest # 如果你使用 pytest
+    # 或者
+    - python tests/test_BFO.py # 如果你有自定义的测试脚本
+  dependencies:
+    - build_job # 声明test_job依赖于build_job的artifact
