@@ -34,6 +34,21 @@ Optional composition override:
 python -m pytilt_diffraction.simulator Cs Pb Br 5.874
 ```
 
+## Web app (Streamlit)
+
+A browser-hosted version of the simulator lives in `streamlit_app.py`. It
+reuses the same physics core (vendored pytilting + `DiffractionCalculator`);
+only the widget layer is swapped for Streamlit controls.
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Deploy: push to GitHub, connect the repo at
+[share.streamlit.io](https://share.streamlit.io), and it auto-redeploys on
+every commit.
+
 ## Controls
 
 - **Glazer tilt system** (radio, two columns): 18 of the 23 Howard-Stokes
