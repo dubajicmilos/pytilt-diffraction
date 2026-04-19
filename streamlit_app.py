@@ -39,6 +39,7 @@ from pytilt_diffraction.calculator import CIFParser, DiffractionCalculator  # no
 from pytilt_diffraction.simulator import (  # noqa: E402
     GLAZER_PRESETS,
     MATERIALS,
+    _fmt_hkl,
     glazer_equality_groups,
 )
 
@@ -166,6 +167,8 @@ with st.sidebar:
     h_max_sc = st.slider("h_max (single crystal)", 3, 14, 8, step=1)
     spot_scale = st.slider("spot size", 30.0, 800.0, 250.0)
     show_labels = st.checkbox("show hkl labels", value=True)
+    log_scale = st.checkbox("log intensity", value=True)
+    log_floor_exp = st.slider("log floor (10^x)", -6, -2, -4, step=1)
 
     st.divider()
     st.header("Powder pattern")
@@ -199,11 +202,11 @@ refl = calc.get_plane_reflections(
     zone_axis,
     h_max_sc,
     d_min,
-    I_min=1e-3,
+    I_min=10.0 ** (log_floor_exp - 1),
     layer=layer,
     I_max_ref=I_max_ref,
 )
-refl = calc.get_2d_coordinates(refl, zone_axis)
+refl = calc.get_2d_coordinates(refl, zone_axis, grid=(2, 2, 2))
 
 peaks = calc.powder_pattern(
     wavelength=wavelength,
@@ -220,7 +223,8 @@ BG, PANEL, TEXT, TEXT_DIM = "#0d1117", "#161b22", "#e6edf3", "#8b949e"
 ACCENT, ACCENT_2, GRID = "#ff6b35", "#4a90e2", "#21262d"
 
 
-def draw_zone(refl, zone_axis, layer, spot_scale, show_labels):
+def draw_zone(refl, zone_axis, layer, spot_scale, show_labels,
+              log_scale=True, log_floor=1e-4):
     plt.style.use("dark_background")
     fig, ax = plt.subplots(figsize=(6.2, 6.2))
     fig.patch.set_facecolor(BG)
@@ -245,15 +249,24 @@ def draw_zone(refl, zone_axis, layer, spot_scale, show_labels):
         xs = np.array([r["x"] for r in refl])
         ys = np.array([r["y"] for r in refl])
         Is = np.array([r["I_norm"] for r in refl])
-        sc = ax.scatter(xs, ys, s=spot_scale * Is + 4, c=Is, cmap="hot", alpha=0.95)
-        plt.colorbar(sc, ax=ax, label="I / I_max", shrink=0.8)
+        if log_scale:
+            floor = max(log_floor, 1e-10)
+            Iplot = (np.log10(np.clip(Is, floor, 1.0)) - np.log10(floor)) / (-np.log10(floor))
+            cbar_label = f"log10(I / I_max), floor = 10^{int(np.log10(floor))}"
+        else:
+            Iplot = Is
+            cbar_label = "I / I_max"
+        sizes = spot_scale * np.sqrt(np.clip(Iplot, 0.04, 1.0)) + 6
+        sc = ax.scatter(xs, ys, s=sizes, c=Iplot, cmap="hot", alpha=0.95,
+                        vmin=0, vmax=1)
+        plt.colorbar(sc, ax=ax, label=cbar_label, shrink=0.8)
         if show_labels:
             thr = 0.05
             for r, I in zip(refl, Is):
                 if I < thr:
                     continue
                 ax.annotate(
-                    f"({r['h']}{r['k']}{r['l']})",
+                    f"({_fmt_hkl(r['h_p'])} {_fmt_hkl(r['k_p'])} {_fmt_hkl(r['l_p'])})",
                     xy=(r["x"], r["y"]),
                     xytext=(4, 4),
                     textcoords="offset points",
@@ -266,8 +279,8 @@ def draw_zone(refl, zone_axis, layer, spot_scale, show_labels):
         f"Zone [{u}{v}{w}]   layer = {layer}   ({len(refl)} reflections)",
         color=TEXT,
     )
-    ax.set_xlabel("reciprocal-lattice units", color=TEXT)
-    ax.set_ylabel("reciprocal-lattice units", color=TEXT)
+    ax.set_xlabel("reciprocal lattice (parent pseudocubic)", color=TEXT)
+    ax.set_ylabel("reciprocal lattice (parent pseudocubic)", color=TEXT)
     return fig
 
 
@@ -357,7 +370,8 @@ col_a, col_b = st.columns([1, 1.3])
 with col_a:
     st.subheader("Reciprocal-space zone slice")
     st.pyplot(
-        draw_zone(refl, zone_axis, layer, spot_scale, show_labels),
+        draw_zone(refl, zone_axis, layer, spot_scale, show_labels,
+                  log_scale=log_scale, log_floor=10.0 ** log_floor_exp),
         clear_figure=True,
     )
 with col_b:
@@ -377,9 +391,9 @@ with tab_zone:
     if refl:
         rows = [
             {
-                "h": r["h"],
-                "k": r["k"],
-                "l": r["l"],
+                "h": round(r["h_p"], 4),
+                "k": round(r["k_p"], 4),
+                "l": round(r["l_p"], 4),
                 "d (A)": round(r["d"], 4),
                 "I / I_max": round(r["I_norm"], 4),
             }

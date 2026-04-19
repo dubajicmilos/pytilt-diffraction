@@ -384,13 +384,19 @@ class DiffractionCalculator:
             p['I_norm'] = p['I'] / I_max if I_max > 0 else 0.0
         return [p for p in peaks if p['I_norm'] >= I_min]
 
-    def get_2d_coordinates(self, reflections, zone_axis):
+    def get_2d_coordinates(self, reflections, zone_axis, grid=None):
         """
         Convert 3D hkl to 2D plot coordinates based on zone axis.
+
+        If `grid` is given (e.g. (2,2,2) for a 2x2x2 supercell), the
+        hkl is divided component-wise by the grid so the plot lives in
+        *parent pseudocubic* reciprocal-lattice units: a parent (1,0,0)
+        reflection then plots at x=1, not at the supercell (2,0,0).
+        Also stores r['h_p'], r['k_p'], r['l_p'] = parent indices.
         """
         u, v, w = zone_axis
         zone = np.array([u, v, w], dtype=float)
-        
+
         # Find two perpendicular vectors
         if abs(u) <= abs(v) and abs(u) <= abs(w):
             perp1 = np.array([0, -w, v], dtype=float)
@@ -398,19 +404,27 @@ class DiffractionCalculator:
             perp1 = np.array([-w, 0, u], dtype=float)
         else:
             perp1 = np.array([-v, u, 0], dtype=float)
-        
+
         if np.linalg.norm(perp1) < 1e-10:
             perp1 = np.array([1, 0, 0], dtype=float)
-        
+
         perp1 = perp1 / np.linalg.norm(perp1)
         perp2 = np.cross(zone, perp1)
         perp2 = perp2 / np.linalg.norm(perp2)
-        
+
+        if grid is None:
+            g = np.array([1.0, 1.0, 1.0])
+        else:
+            g = np.array(grid, dtype=float)
+
         for r in reflections:
-            hkl = np.array([r['h'], r['k'], r['l']], dtype=float)
-            r['x'] = np.dot(hkl, perp1)
-            r['y'] = np.dot(hkl, perp2)
-        
+            hkl_p = np.array([r['h'], r['k'], r['l']], dtype=float) / g
+            r['h_p'] = hkl_p[0]
+            r['k_p'] = hkl_p[1]
+            r['l_p'] = hkl_p[2]
+            r['x'] = np.dot(hkl_p, perp1)
+            r['y'] = np.dot(hkl_p, perp2)
+
         return reflections
 
 

@@ -101,6 +101,14 @@ MATERIALS = [
 ]
 
 
+def _fmt_hkl(x, tol=1e-6):
+    """Render a parent-units Miller component: integer when close to one,
+    otherwise a short decimal (e.g. 1.5, 0.5, -0.5)."""
+    if abs(x - round(x)) < tol:
+        return f"{int(round(x))}"
+    return f"{x:g}"
+
+
 # Map Glazer sign/letter pattern -> which omega components must be equal
 # Returns list of groups; each group's magnitudes are forced equal
 def glazer_equality_groups(g):
@@ -161,11 +169,12 @@ class TiltDiffractionSimulator:
         self.zone_axis  = (0, 0, 1)
         self.h_max      = 8
         self.d_min      = 0.8
-        self.I_min      = 1e-3
+        self.I_min      = 1e-5
         self.spot_scale = 250.0
         self.show_labels   = True
         self.label_thresh  = 0.05
-        self.log_scale     = False
+        self.log_scale     = True
+        self.I_floor      = 1e-4
         # HKx layer selector: integer layer index in *supercell* Miller units.
         # For the default (2,2,2) grid this means half-integer steps in the
         # parent pseudocubic cell (layer=1 supercell ~ 0.5 parent).
@@ -264,7 +273,7 @@ class TiltDiffractionSimulator:
             layer=self.layer, I_max_ref=self.I_max_ref,
         )
         self.reflections = self.calc.get_2d_coordinates(
-            self.reflections, self.zone_axis,
+            self.reflections, self.zone_axis, grid=self.grid,
         )
 
     def _parent_layer(self):
@@ -820,11 +829,16 @@ class TiltDiffractionSimulator:
                 f.write(f"# layer     : L_super = {self.layer:+d}   "
                         f"L_parent = {self._parent_layer():+.3f}\n")
                 f.write(f"# d_min     : {self.d_min}\n")
-                f.write(f"# {'h':>4} {'k':>4} {'l':>4} {'d(A)':>8} "
-                        f"{'|F|':>10} {'I':>12} {'I/Imax':>8}\n")
+                f.write(f"# grid      : {self.grid}\n")
+                f.write(f"# hkl columns are parent pseudocubic; "
+                        f"h_s etc. are supercell integers\n")
+                f.write(f"# {'h':>6} {'k':>6} {'l':>6} "
+                        f"{'h_s':>4} {'k_s':>4} {'l_s':>4} "
+                        f"{'d(A)':>8} {'|F|':>10} {'I':>12} {'I/Imax':>8}\n")
                 for r in sorted(self.reflections, key=lambda x: -x['I']):
                     f.write(
-                        f"  {r['h']:4d} {r['k']:4d} {r['l']:4d} "
+                        f"  {r['h_p']:6.3f} {r['k_p']:6.3f} {r['l_p']:6.3f} "
+                        f"{r['h']:4d} {r['k']:4d} {r['l']:4d} "
                         f"{r['d']:8.4f} {r['F']:10.2f} {r['I']:12.2f} "
                         f"{r['I_norm']:8.4f}\n"
                     )
@@ -878,10 +892,11 @@ class TiltDiffractionSimulator:
             y = np.array([r['y'] for r in self.reflections])
             I = np.array([r['I_norm'] for r in self.reflections])
             if self.log_scale:
-                Iplot = np.log10(I * 999 + 1) / np.log10(1000)
+                floor = max(self.I_floor, 1e-10)
+                Iplot = (np.log10(np.clip(I, floor, 1.0)) - np.log10(floor)) / (-np.log10(floor))
             else:
                 Iplot = I
-            sizes = self.spot_scale * np.sqrt(Iplot) + 3.0
+            sizes = self.spot_scale * np.sqrt(np.clip(Iplot, 0.04, 1.0)) + 6.0
 
             self.ax.scatter(
                 x, y, s=sizes, c=Iplot, cmap=self.SPOT_CMAP,
@@ -892,8 +907,9 @@ class TiltDiffractionSimulator:
             if self.show_labels:
                 for r in self.reflections:
                     if r['I_norm'] >= self.label_thresh:
+                        hp, kp, lp = r['h_p'], r['k_p'], r['l_p']
                         self.ax.annotate(
-                            f"{r['h']},{r['k']},{r['l']}",
+                            f"{_fmt_hkl(hp)},{_fmt_hkl(kp)},{_fmt_hkl(lp)}",
                             (r['x'], r['y']),
                             xytext=(3, 3), textcoords='offset points',
                             fontsize=6, color='#c9d1d9', alpha=0.85,
@@ -921,8 +937,10 @@ class TiltDiffractionSimulator:
         self.ax.tick_params(colors=self.TEXT_DIM, labelsize=8)
         for s in self.ax.spines.values():
             s.set_color(self.GRID)
-        self.ax.set_xlabel('reciprocal h*', color=self.TEXT_DIM)
-        self.ax.set_ylabel('reciprocal k*', color=self.TEXT_DIM)
+        self.ax.set_xlabel('reciprocal lattice (parent pseudocubic)',
+                           color=self.TEXT_DIM)
+        self.ax.set_ylabel('reciprocal lattice (parent pseudocubic)',
+                           color=self.TEXT_DIM)
 
     def _draw_info(self):
         self.info_ax.clear()
@@ -972,14 +990,15 @@ class TiltDiffractionSimulator:
         self.refl_ax.axis('off')
         self.refl_ax.set_facecolor(self.PANEL)
 
-        title = "STRONGEST REFLECTIONS\n" \
-                "---------------------\n" \
-                "  h  k  l   d(A)   I/Imax\n"
+        title = "STRONGEST REFLECTIONS (parent hkl)\n" \
+                "----------------------------------\n" \
+                "   h    k    l   d(A)   I/Imax\n"
         lines = [title]
         top = sorted(self.reflections, key=lambda r: -r['I_norm'])[:18]
         for r in top:
             lines.append(
-                f" {r['h']:>2} {r['k']:>2} {r['l']:>2}   "
+                f" {_fmt_hkl(r['h_p']):>4} {_fmt_hkl(r['k_p']):>4} "
+                f"{_fmt_hkl(r['l_p']):>4}   "
                 f"{r['d']:5.3f}   {r['I_norm']:6.3f}"
             )
         self.refl_ax.text(
