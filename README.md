@@ -1,3 +1,4 @@
+
 # pytilt-diffraction
 
 Interactive single-crystal X-ray diffraction simulator for perovskites with
@@ -10,7 +11,7 @@ The 15 distinct tilt systems exposed in the GUI are the
 group-subgroup tree of Howard & Stokes (1998) -- the subset of Glazer's (1972)
 23 patterns:
 
-![Howard-Stokes 15 tilt systems](docs/screenshots/howard_stokes_tree.png)
+![Howard-Stokes 15 tilt systems](<img width="1429" height="736" alt="tilts_1" src="https://github.com/user-attachments/assets/25348261-8d1a-408e-b74b-c6ab6587ae34" />)
 
 Built on top of the [pytilting](https://gitlab.com/pyseries/pytilting)
 tilt-generator (vendored under `vendor/pytilting/`, GPL v2). The structure
