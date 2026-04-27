@@ -111,10 +111,13 @@ class CIFViewer:
         self.layer         = 0
         self.twin_3        = False
 
-        # Matrix-export parameters
+        # Matrix-export parameters. Setting export_extent_rlu = None means
+        # "auto-fit to the data range at export time" (the recommended
+        # default, since for grid=None CIFs the visible reflections can
+        # easily extend to +/- h_max which is much larger than 2.5 rlu).
         self.export_n_pix = 512
         self.export_sigma_rlu = 0.015
-        self.export_extent_rlu = 2.5     # +/- this in rlu
+        self.export_extent_rlu = None    # None -> auto-fit; set float to override
 
         # Glazer-only attributes that _draw_pattern peeks at -- give them
         # neutral values so the title still renders cleanly.
@@ -502,7 +505,19 @@ class CIFViewer:
             self._set_status(f"hkl export failed: {ex}", ok=False)
 
     def _on_export_matrix(self, _):
-        ext = self.export_extent_rlu
+        # Decide extent: auto-fit (default) or user-supplied override.
+        if self.export_extent_rlu is None:
+            if self.reflections:
+                data_max = max(
+                    max(abs(r['x']) for r in self.reflections),
+                    max(abs(r['y']) for r in self.reflections),
+                )
+                # Round up to next 0.5 rlu so we don't clip the outer ring.
+                ext = max(2.5, float(np.ceil(data_max * 2.0) / 2.0))
+            else:
+                ext = 2.5
+        else:
+            ext = float(self.export_extent_rlu)
         extent = (-ext, ext, -ext, ext)
         try:
             img = self.calc.rasterize_plane(

@@ -108,6 +108,12 @@ The matrix-export grid resolution is controlled by the `export grid
 
 ## Web app (Streamlit)
 
+**Live demo (no install required):**
+
+- Glazer simulator: <https://pytilt-diffraction-milos.streamlit.app/>
+- CIF viewer (upload a `.cif`):
+  <https://pytilt-diffraction-milos.streamlit.app/CIF_viewer>
+
 A browser version of both modes lives in `streamlit_app.py` (Glazer
 simulator) and `pages/2_CIF_viewer.py` (CIF upload). They share the
 same `DiffractionCalculator`; only the widget layer is Streamlit.
@@ -122,9 +128,8 @@ the left-hand sidebar nav: the Glazer simulator (default) and the CIF
 viewer (drag-and-drop a `.cif`, with the same hkl / matrix downloads
 as the desktop GUI).
 
-Deploy: push to GitHub, connect the repo at
-[share.streamlit.io](https://share.streamlit.io), and it auto-redeploys on
-every commit.
+The live demo is deployed via [share.streamlit.io](https://share.streamlit.io)
+and auto-redeploys on every push to `main`.
 
 ## Controls
 

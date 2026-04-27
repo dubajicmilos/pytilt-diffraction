@@ -237,41 +237,62 @@ ACCENT, ACCENT_2, GRID = "#ff6b35", "#4a90e2", "#21262d"
 
 def draw_zone(refl, zone_axis, layer, spot_scale, show_labels,
               log_scale=True, log_floor=1e-4):
-    plt.style.use("dark_background")
+    """Render the diffraction pattern using the same visual encoding as
+    the desktop GUI (`simulator._draw_pattern`): light plot panel,
+    Blues colormap (darker = stronger), marker color and area both
+    scaled with intensity, gamma compression in linear mode so weak
+    peaks remain visible, dark edges, red 000 marker."""
+    # Plot-panel-only colors (read against light bg)
+    PLOT_BG       = "#fafafa"
+    PLOT_TEXT     = "#1f2328"
+    PLOT_TEXT_DIM = "#57606a"
+    PLOT_GRID     = "#d0d7de"
+    SPOT_EDGE     = "#1f2328"
+    ZERO_FACE     = "#c8102e"
+
     fig, ax = plt.subplots(figsize=(6.2, 6.2))
     fig.patch.set_facecolor(BG)
-    ax.set_facecolor("#000000")
+    ax.set_facecolor(PLOT_BG)
     for s in ax.spines.values():
-        s.set_color(GRID)
-    ax.tick_params(colors=TEXT_DIM)
+        s.set_color(PLOT_GRID)
+    ax.tick_params(colors=PLOT_TEXT_DIM)
     ax.set_aspect("equal")
-    ax.grid(alpha=0.15, color=GRID)
+    ax.grid(True, alpha=0.8, color=PLOT_GRID, linewidth=0.5)
+    ax.axhline(0, color=PLOT_GRID, linewidth=0.8)
+    ax.axvline(0, color=PLOT_GRID, linewidth=0.8)
 
     if not refl:
-        ax.text(
-            0.5,
-            0.5,
-            "(no reflections on this layer)",
-            color=TEXT_DIM,
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.text(0.5, 0.5, "(no reflections on this layer)",
+                color=PLOT_TEXT_DIM, ha="center", va="center",
+                transform=ax.transAxes)
     else:
         xs = np.array([r["x"] for r in refl])
         ys = np.array([r["y"] for r in refl])
         Is = np.array([r["I_norm"] for r in refl])
         if log_scale:
             floor = max(log_floor, 1e-10)
-            Iplot = (np.log10(np.clip(Is, floor, 1.0)) - np.log10(floor)) / (-np.log10(floor))
+            Iplot = (np.log10(np.clip(Is, floor, 1.0)) - np.log10(floor)) \
+                    / (-np.log10(floor))
             cbar_label = f"log10(I / I_max), floor = 10^{int(np.log10(floor))}"
         else:
-            Iplot = Is
+            Iplot = np.clip(Is, 0.0, 1.0)
             cbar_label = "I / I_max"
-        sizes = spot_scale * np.sqrt(np.clip(Iplot, 0.04, 1.0)) + 6
-        sc = ax.scatter(xs, ys, s=sizes, c=Iplot, cmap="hot", alpha=0.95,
-                        vmin=0, vmax=1)
+
+        # Gamma compression in linear mode so the dominant Bragg peaks
+        # don't squash everything else to invisible.
+        gamma = 1.0 if log_scale else 0.4
+        Iv = np.clip(Iplot, 1e-6, 1.0) ** gamma
+
+        # Color: floor at 0.18 so weak peaks still get visible light blue.
+        # Size: linear in Iv with a ~3 px diameter floor for readability.
+        Icolor = np.clip(Iv, 0.18, 1.0)
+        sizes  = spot_scale * np.clip(Iv, 0.02, 1.0) + 6.0
+
+        sc = ax.scatter(xs, ys, s=sizes, c=Icolor, cmap="Blues",
+                        alpha=0.95, edgecolors=SPOT_EDGE, linewidths=0.5,
+                        vmin=0.0, vmax=1.0, zorder=5)
         plt.colorbar(sc, ax=ax, label=cbar_label, shrink=0.8)
+
         if show_labels:
             thr = 0.05
             for r, I in zip(refl, Is):
@@ -282,17 +303,23 @@ def draw_zone(refl, zone_axis, layer, spot_scale, show_labels,
                     xy=(r["x"], r["y"]),
                     xytext=(4, 4),
                     textcoords="offset points",
-                    color=TEXT,
+                    color=PLOT_TEXT,
                     fontsize=8,
                 )
+
+    # 000 marker (red disc with dark edge -- visible against the light bg).
+    ax.scatter([0], [0], s=110, c=ZERO_FACE, edgecolors=SPOT_EDGE,
+               linewidths=1.0, zorder=10)
 
     u, v, w = zone_axis
     ax.set_title(
         f"Zone [{u}{v}{w}]   layer = {layer}   ({len(refl)} reflections)",
-        color=TEXT,
+        color=PLOT_TEXT,
     )
-    ax.set_xlabel("reciprocal lattice (parent pseudocubic)", color=TEXT)
-    ax.set_ylabel("reciprocal lattice (parent pseudocubic)", color=TEXT)
+    ax.set_xlabel("reciprocal lattice (parent pseudocubic)",
+                  color=PLOT_TEXT_DIM)
+    ax.set_ylabel("reciprocal lattice (parent pseudocubic)",
+                  color=PLOT_TEXT_DIM)
     return fig
 
 

@@ -75,7 +75,18 @@ with st.sidebar:
     export_n_pix = st.select_slider(
         'grid (n_pix)', options=[128, 256, 384, 512, 768, 1024], value=512,
     )
-    export_extent = st.slider('extent (rlu, +/-)', 1.0, 5.0, 2.5, step=0.5)
+    # The default extent is filled in *after* we know the reflections
+    # (auto-fit to actual data, with optional manual override below).
+    auto_fit_extent = st.checkbox(
+        'auto-fit extent to data', value=True,
+        help='Match the matrix extent to the actual reflection range so '
+             'the matrix covers the same area you see in the diffraction '
+             'plot. Uncheck to set the extent manually.',
+    )
+    manual_extent = st.slider(
+        'extent (rlu, +/-)', 1.0, 15.0, 5.0, step=0.5,
+        disabled=auto_fit_extent,
+    )
     export_sigma = st.slider('Gaussian sigma (rlu)', 0.005, 0.05,
                              0.015, step=0.005)
 
@@ -231,7 +242,18 @@ with top_right:
         'side-by-side comparison with experimental detector images.'
     )
     if refl:
-        ext = float(export_extent)
+        if auto_fit_extent:
+            data_max = max(
+                max(abs(r['x']) for r in refl),
+                max(abs(r['y']) for r in refl),
+            )
+            # Round up to next 0.5 rlu so the boundary doesn't clip the
+            # outermost reflections; fall back to 2.5 if data is empty.
+            ext = max(2.5, float(np.ceil(data_max * 2.0) / 2.0))
+        else:
+            ext = float(manual_extent)
+        st.caption(f"Matrix extent: +/- {ext:.1f} rlu  "
+                   f"({'auto-fit' if auto_fit_extent else 'manual'})")
         img = calc.rasterize_plane(
             refl, extent=(-ext, ext, -ext, ext),
             n_pix=int(export_n_pix), sigma=float(export_sigma),
