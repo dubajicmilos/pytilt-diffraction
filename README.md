@@ -2,13 +2,12 @@
 
 Interactive single-crystal X-ray diffraction simulator for perovskites with
 tunable Glazer octahedral-tilt systems. A matplotlib GUI that lets you pick a
-tilt pattern (`a+b-b-`, `a0a0c-`, ...) and watch the reciprocal-space pattern
+tilt pattern and watch the reciprocal-space pattern
 update as you drag the tilt-angle sliders, switch zone axes, or step through
 HKL layers.
 
 The 15 distinct tilt systems exposed in the GUI are the
-group-subgroup tree of Howard & Stokes (1998) -- the
-crystallographically non-equivalent subset of Glazer's (1972)
+group-subgroup tree of Howard & Stokes (1998) -- the subset of Glazer's (1972)
 23 patterns:
 
 ![Howard-Stokes 15 tilt systems](docs/screenshots/howard_stokes_tree.png)
@@ -42,17 +41,6 @@ python -m pytilt_diffraction.simulator
 pytilt-gui
 ```
 
-Optional composition + cubic lattice-constant override (4 positional
-arguments: A B X a0). The first three set the ABX3 composition, the
-fourth sets the cubic aristotype lattice parameter `a0` in angstroms:
-
-```bash
-python -m pytilt_diffraction.simulator Cs Pb Br 5.874
-#                                      A  B  X  a0 (A)
-```
-
-Both can be changed at runtime too -- the material radio picks the
-composition, the `a0` slider tunes the lattice constant.
 
 ## Screenshots
 
@@ -72,23 +60,9 @@ superlattice reflection produced by the octahedral tilts:
 
 **Intensity encoding:** marker color (white -> dark blue, `Blues`
 colormap) and marker size both scale with reflection intensity --
-darker and bigger = stronger, matching single-crystal-diffractometer
-software conventions. Linear mode applies a mild gamma compression so
+darker and bigger = stronger. Linear mode applies a mild gamma compression so
 weak peaks stay visible alongside the dominant Bragg reflections; log
 mode uses log-stretched intensities directly.
-
-> The earlier rendering (`hot` cmap on a black panel) collapsed weak peaks
-> into hollow white rings on black in linear mode. Before / after:
->
-> | before | after |
-> |---|---|
-> | ![before](docs/screenshots/linear_before.png) | ![after](docs/screenshots/linear_after.png) |
-
-To regenerate the screenshots after a styling change:
-
-```bash
-python docs/screenshots/_screenshot_gen.py
-```
 
 ## Generic CIF viewer
 
