@@ -162,12 +162,21 @@ with st.sidebar:
     zone_label = st.selectbox("Zone axis", list(zone_opts.keys()), index=0)
     zone_axis = zone_opts[zone_label]
 
-    layer = st.slider("HK_L layer (supercell)", -4, 4, 0, step=1)
+    layer = st.slider("HKL layer (supercell)", -4, 4, 0, step=1)
     d_min = st.slider("d_min (A)", 0.3, 2.5, 0.8, step=0.05)
     h_max_sc = st.slider("h_max (single crystal)", 3, 14, 8, step=1)
     spot_scale = st.slider("spot size", 30.0, 800.0, 250.0)
     show_labels = st.checkbox("show hkl labels", value=True)
     log_scale = st.checkbox("log intensity", value=True)
+    twin_3 = st.checkbox(
+        "twin (3 domains, for a0a0c+/-)",
+        value=False,
+        help=(
+            "Incoherently sum intensity over 3 cubic-parent twin domains "
+            "with c || x, y, z (I = |F(h,k,l)|^2 + |F(l,k,h)|^2 + "
+            "|F(h,l,k)|^2). Physical for a0a0c+ and a0a0c- in a cubic parent."
+        ),
+    )
     log_floor_exp = st.slider("log floor (10^x)", -6, -2, -4, step=1)
 
     st.divider()
@@ -195,7 +204,9 @@ calc = build_calculator(symbols_tuple, round(a0, 6), glazer, omega_tuple)
 
 # Global intensity normaliser (strongest layer-0 peak), matches the desktop
 # simulator so that odd-layer superlattice peaks don't get rescaled to 1.
-ref_layer0 = calc.get_plane_reflections(zone_axis, h_max_sc, d_min, I_min=0.0, layer=0)
+ref_layer0 = calc.get_plane_reflections(
+    zone_axis, h_max_sc, d_min, I_min=0.0, layer=0, twin=twin_3,
+)
 I_max_ref = max((r["I"] for r in ref_layer0), default=1.0)
 
 refl = calc.get_plane_reflections(
@@ -205,6 +216,7 @@ refl = calc.get_plane_reflections(
     I_min=10.0 ** (log_floor_exp - 1),
     layer=layer,
     I_max_ref=I_max_ref,
+    twin=twin_3,
 )
 refl = calc.get_2d_coordinates(refl, zone_axis, grid=(2, 2, 2))
 

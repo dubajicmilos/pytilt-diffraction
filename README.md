@@ -4,11 +4,25 @@ Interactive single-crystal X-ray diffraction simulator for perovskites with
 tunable Glazer octahedral-tilt systems. A matplotlib GUI that lets you pick a
 tilt pattern (`a+b-b-`, `a0a0c-`, ...) and watch the reciprocal-space pattern
 update as you drag the tilt-angle sliders, switch zone axes, or step through
-HK_L layers.
+HKL layers.
+
+The 15 distinct tilt systems exposed in the GUI are the
+group-subgroup tree of Howard & Stokes (1998) -- the
+crystallographically non-equivalent subset of Glazer's (1972)
+23 patterns:
+
+![Howard-Stokes 15 tilt systems](docs/screenshots/howard_stokes_tree.png)
 
 Built on top of the [pytilting](https://gitlab.com/pyseries/pytilting)
 tilt-generator (vendored under `vendor/pytilting/`, GPL v2). The structure
 factor / `F(hkl)` engine and the GUI are original.
+
+**References**
+
+- Glazer, A. M. (1972). *The classification of tilted octahedra in
+  perovskites*. Acta Cryst. **B28**, 3384-3392.
+- Howard, C. J. & Stokes, H. T. (1998). *Group-Theoretical Analysis of
+  Octahedral Tilting in Perovskites*. Acta Cryst. **B54**, 782-789.
 
 ## Install
 
@@ -28,22 +42,111 @@ python -m pytilt_diffraction.simulator
 pytilt-gui
 ```
 
-Optional composition override:
+Optional composition + cubic lattice-constant override (4 positional
+arguments: A B X a0). The first three set the ABX3 composition, the
+fourth sets the cubic aristotype lattice parameter `a0` in angstroms:
 
 ```bash
 python -m pytilt_diffraction.simulator Cs Pb Br 5.874
+#                                      A  B  X  a0 (A)
 ```
+
+Both can be changed at runtime too -- the material radio picks the
+composition, the `a0` slider tunes the lattice constant.
+
+## Screenshots
+
+CsPbI3 with `a+a+a+`, alpha = 6 deg, zone [001], L = 0 (parent rlu).
+
+| log intensity | linear intensity |
+|---|---|
+| ![log mode](docs/screenshots/log_after.png) | ![linear mode](docs/screenshots/linear_after.png) |
+
+Half-integer parent layer (`L_super = 1`, equivalent to L = 0.5 in the
+parent pseudocubic cell). The 2x2x2 supercell doubles the reciprocal-
+lattice spacing along each axis, so odd `L_super` slices fall *between*
+the parent Bragg peaks -- a slice where every visible peak is a
+superlattice reflection produced by the octahedral tilts:
+
+![log mode, L_super=1](docs/screenshots/log_after_L1.png)
+
+**Intensity encoding:** marker color (white -> dark blue, `Blues`
+colormap) and marker size both scale with reflection intensity --
+darker and bigger = stronger, matching single-crystal-diffractometer
+software conventions. Linear mode applies a mild gamma compression so
+weak peaks stay visible alongside the dominant Bragg reflections; log
+mode uses log-stretched intensities directly.
+
+> The earlier rendering (`hot` cmap on a black panel) collapsed weak peaks
+> into hollow white rings on black in linear mode. Before / after:
+>
+> | before | after |
+> |---|---|
+> | ![before](docs/screenshots/linear_before.png) | ![after](docs/screenshots/linear_after.png) |
+
+To regenerate the screenshots after a styling change:
+
+```bash
+python docs/screenshots/_screenshot_gen.py
+```
+
+## Generic CIF viewer
+
+If you just want single-crystal diffraction from an arbitrary CIF (no
+Glazer / tilt machinery, no perovskite assumption), there's a separate
+GUI built on the same `DiffractionCalculator`:
+
+```bash
+python -m pytilt_diffraction.cif_viewer path/to/structure.cif
+# or, with no path -> file picker
+python -m pytilt_diffraction.cif_viewer
+```
+
+Same controls as the Glazer simulator (zone axis, HKL layer slider,
+d_min, h_max, log/linear, twin (3 domains), labels), plus:
+
+The HKL layer slider works for every zone axis -- not just [001]. It
+sets the integer constant `L` in the zone-law `h*u + k*v + l*w = L`,
+so:
+
+  - zone [001]: layer L  =>  hk-plane at l = L
+  - zone [100]: layer L  =>  kl-plane at h = L
+  - zone [110]: layer L  =>  diagonal slice  h + k = L
+  - zone [111]: layer L  =>  diagonal slice  h + k + l = L
+
+The plot title prints the explicit zone-law constraint so it's
+unambiguous which slice you're looking at.
+
+
+
+- **Save PNG**       -- the current pattern.
+- **Export hkl**     -- `(h, k, l, d, |F|, I, I_norm)` table as `.txt`.
+- **Export 2D matrix** -- rasterise the visible slice as a regular
+  `n_pix x n_pix` array of summed Gaussians, written as both
+  `.npy` and `.csv` (plus a `*_meta.txt` describing the extent and
+  shape). Use this to compare side-by-side with experimental detector
+  images, or feed it to MATLAB / Origin / Igor.
+
+![CIF viewer](docs/screenshots/cif_viewer_log.png)
+
+The matrix-export grid resolution is controlled by the `export grid
+(n_pix)` slider at the bottom (64 to 1024 pixels per side).
 
 ## Web app (Streamlit)
 
-A browser-hosted version of the simulator lives in `streamlit_app.py`. It
-reuses the same physics core (vendored pytilting + `DiffractionCalculator`);
-only the widget layer is swapped for Streamlit controls.
+A browser version of both modes lives in `streamlit_app.py` (Glazer
+simulator) and `pages/2_CIF_viewer.py` (CIF upload). They share the
+same `DiffractionCalculator`; only the widget layer is Streamlit.
 
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
+
+Streamlit picks up `pages/` automatically, so you'll see two entries in
+the left-hand sidebar nav: the Glazer simulator (default) and the CIF
+viewer (drag-and-drop a `.cif`, with the same hkl / matrix downloads
+as the desktop GUI).
 
 Deploy: push to GitHub, connect the repo at
 [share.streamlit.io](https://share.streamlit.io), and it auto-redeploys on
@@ -51,13 +154,18 @@ every commit.
 
 ## Controls
 
-- **Glazer tilt system** (radio, two columns): 18 of the 23 Howard-Stokes
-  systems mapped to their aristotype space group.
+- **Glazer tilt system** (radio, two columns): the 15 distinct tilt
+  systems of Howard & Stokes (1998), labelled with the standard
+  hettotype space-group symbol. (Glazer (1972) listed 23 patterns;
+  Howard & Stokes showed 8 of these are crystallographically equivalent
+  to others, leaving 15.)
 - **omega_x / omega_y / omega_z** (sliders): tilt magnitudes in degrees.
   Magnitudes that the Glazer letters demand equal are kept tied automatically.
-- **HK_L layer** (slider): integer layer in the supercell reciprocal lattice.
-  For a 2x2x2 supercell, layer 1 == 0.5 in the parent pseudocubic cell
-  (shows R-point / superlattice reflections).
+- **HKL layer** (slider): integer L index in the supercell reciprocal
+  lattice -- selects which constant-L slice through reciprocal space the
+  pattern shows. For the default 2x2x2 supercell, `L_super = 1` corresponds
+  to L = 0.5 in the parent pseudocubic cell (the R-point / superlattice
+  layer).
 - **Zone axis** (radio): view direction of the reciprocal-space slice.
 - **Material** (radio, two columns): 16 ABX3 perovskite presets covering
   halides (CsPbCl3, CsPbBr3, CsPbI3, CsSnBr3, CsGeBr3, RbPbBr3), oxides
@@ -83,14 +191,20 @@ every commit.
 pytilt-diffraction/
     pytilt_diffraction/
         __init__.py
-        calculator.py   # CIFParser + DiffractionCalculator
-        simulator.py    # interactive matplotlib GUI
+        calculator.py   # CIFParser + DiffractionCalculator + rasterize_plane
+        simulator.py    # Glazer GUI (perovskite + tilt sliders)
+        cif_viewer.py   # generic CIF GUI (any structure)
+    streamlit_app.py    # Streamlit: Glazer mode (default page)
+    pages/
+        2_CIF_viewer.py # Streamlit: CIF upload mode (sidebar nav)
     vendor/
         pytilting/      # upstream Glazer-tilt generator, vendored (GPL v2)
     tests/
         test_physics.py
         test_diffsims_parity.py
     examples/
+    docs/
+        screenshots/    # PNGs referenced by README
     pyproject.toml
     README.md
     LICENSE

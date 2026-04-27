@@ -259,7 +259,7 @@ class DiffractionCalculator:
         return F, d
     
     def get_plane_reflections(self, zone_axis, h_max=20, d_min=0.5, I_min=0.01,
-                              layer=0, I_max_ref=None):
+                              layer=0, I_max_ref=None, twin=False):
         """
         Get reflections for a specific zone/plane at a given layer.
 
@@ -273,6 +273,13 @@ class DiffractionCalculator:
                strongest reflection of the full structure so that layers with
                only numerical-noise peaks (as in cubic at odd supercell L)
                get filtered out by I_min.
+        twin: if True, incoherently sum intensity over three 90-deg twin
+               domains (c-axis of the tilted parent along parent x, y, z):
+                  I(h,k,l) = |F(h,k,l)|^2 + |F(l,k,h)|^2 + |F(h,l,k)|^2
+               Use this for Glazer systems with a unique c axis (a0a0c+,
+               a0a0c-) where three orientational domains are expected in a
+               cubic parent. d-spacing and the stored (h,k,l) are those of
+               the reference (c || z) domain.
         """
         u, v, w = zone_axis
         layer = int(layer)
@@ -288,8 +295,17 @@ class DiffractionCalculator:
                         continue
 
                     F, d = self.calculate_structure_factor(h, k, l)
-                    F_mag = np.abs(F)
-                    I = F_mag ** 2
+                    if twin:
+                        # twin B: c || parent-x  -> F at (l, k, h)
+                        # twin C: c || parent-y  -> F at (h, l, k)
+                        F_b, _ = self.calculate_structure_factor(l, k, h)
+                        F_c, _ = self.calculate_structure_factor(h, l, k)
+                        I = (np.abs(F) ** 2 + np.abs(F_b) ** 2
+                             + np.abs(F_c) ** 2)
+                        F_mag = np.sqrt(I)
+                    else:
+                        F_mag = np.abs(F)
+                        I = F_mag ** 2
 
                     if d < d_min:
                         continue
@@ -383,6 +399,57 @@ class DiffractionCalculator:
         for p in peaks:
             p['I_norm'] = p['I'] / I_max if I_max > 0 else 0.0
         return [p for p in peaks if p['I_norm'] >= I_min]
+
+    @staticmethod
+    def rasterize_plane(reflections, extent=(-2.0, 2.0, -2.0, 2.0),
+                        n_pix=512, sigma=0.015, use_norm=True):
+        """
+        Rasterise a list of 2D reflections (each with 'x', 'y', and an
+        intensity field) onto a regular n_pix x n_pix grid as a sum of
+        Gaussian peaks.
+
+        Parameters
+        ----------
+        reflections : list of dict
+            Each dict must contain 'x', 'y' and 'I' (or 'I_norm' if
+            `use_norm=True`). Coordinates are in the same rlu units as
+            the `extent`.
+        extent : (xmin, xmax, ymin, ymax)
+            Bounds of the output image, in rlu.
+        n_pix : int
+            Output is shape (n_pix, n_pix), indexed [iy, ix] so the
+            image is matplotlib-imshow-friendly with origin='lower'.
+        sigma : float
+            Gaussian peak width in rlu.
+        use_norm : bool
+            If True use 'I_norm' (peak == 1.0); else use raw 'I'.
+
+        Returns
+        -------
+        ndarray of shape (n_pix, n_pix), dtype=float64.
+
+        Notes
+        -----
+        Detector-style image: produces what an idealised single-crystal
+        camera would see at this slice if every reflection were a
+        Gaussian of width sigma. Useful for matrix export -- save with
+        np.save / np.savetxt and post-process in Python / MATLAB / Origin.
+        """
+        xmin, xmax, ymin, ymax = extent
+        xs = np.linspace(xmin, xmax, n_pix)
+        ys = np.linspace(ymin, ymax, n_pix)
+        X, Y = np.meshgrid(xs, ys, indexing='xy')   # shape (n_pix, n_pix)
+        img = np.zeros_like(X)
+        inv2s2 = 1.0 / (2.0 * sigma * sigma)
+        key = 'I_norm' if use_norm else 'I'
+        for r in reflections:
+            I = float(r.get(key, 0.0))
+            if I <= 0.0:
+                continue
+            dx = X - r['x']
+            dy = Y - r['y']
+            img += I * np.exp(-(dx * dx + dy * dy) * inv2s2)
+        return img
 
     def get_2d_coordinates(self, reflections, zone_axis, grid=None):
         """

@@ -50,27 +50,34 @@ from pytilt_diffraction.calculator import (                    # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# The 23 Glazer tilt systems, grouped as in Howard & Stokes (1998)
+# The 15 distinct octahedral-tilt systems of Howard & Stokes (1998),
+# Acta Cryst. B54, 782-789 -- the crystallographically non-equivalent
+# subset of Glazer's (1972) 23 tilt patterns. One Glazer notation is
+# used per row as the canonical representative; entries are arranged
+# tree-down from the aristotype Pm-3m through tier-1 (one tilt removed)
+# to tier-3 (most-tilted triclinic). Space-group symbols are the
+# standard settings.
 # ---------------------------------------------------------------------------
 GLAZER_PRESETS = [
+    # aristotype
     ('a0a0a0', 'Pm-3m',     'cubic (no tilt)'),
+    # tier 1: one tilt component non-zero
     ('a0a0c+', 'P4/mbm',    'single in-phase'),
     ('a0a0c-', 'I4/mcm',    'single out-of-phase'),
     ('a0b+b+', 'I4/mmm',    'two equal in-phase'),
-    ('a0b-b-', 'Imcm',      'two equal out-of-phase'),
-    ('a0b+c-', 'Cmcm',      'mixed in/out'),
-    ('a0b-c-', 'C2/m',      'two unequal out-of-phase'),
+    ('a0b-b-', 'Imma',      'two equal out-of-phase'),
     ('a+a+a+', 'Im-3',      'three equal in-phase'),
-    ('a+b+b+', 'Immm',      'three in-phase'),
-    ('a+b+c+', 'Immm',      'three unequal in-phase'),
-    ('a+a+c-', 'P4_2/nmc',  'pair + one out'),
-    ('a+b+c-', 'Pmmn',      'two in + one out'),
-    ('a+b-b-', 'Pnma',      '*GdFeO3 / Pbnm*'),
-    ('a+a-a-', 'Pnma',      'common perovskite'),
-    ('a+b-c-', 'P2_1/m',    'one in + two out'),
     ('a-a-a-', 'R-3c',      'rhombohedral (LaAlO3)'),
-    ('a-b-b-', 'I2/a',      'two equal out-of-phase'),
-    ('a-b-c-', 'F-1',       'triclinic'),
+    # tier 2: two-component combinations
+    ('a+b+c+', 'Immm',      'three in-phase'),
+    ('a+a+c-', 'P4_2/nmc',  'two equal in + one out'),
+    ('a0b+c-', 'Cmcm',      'mixed in/out'),
+    ('a+b-b-', 'Pnma',      'GdFeO3 / Pbnm   (most common perovskite)'),
+    ('a0b-c-', 'C2/m',      'two unequal out-of-phase'),
+    ('a-b-b-', 'C2/c',      'monoclinic'),
+    # tier 3: most-tilted (all three components mixed signs)
+    ('a+b-c-', 'P2_1/m',    'one in + two out'),
+    ('a-b-c-', 'P-1',       'triclinic'),
 ]
 
 # ---------------------------------------------------------------------------
@@ -139,16 +146,29 @@ def glazer_nonzero_axes(g):
 class TiltDiffractionSimulator:
     """Interactive Glazer-tilt + single-crystal diffraction."""
 
-    # Palette (SingleCrystal-ish: dark with warm spot colormap)
+    # Palette
+    #   Surrounding GUI: dark (BG / PANEL / TEXT / TEXT_DIM / GRID).
+    #   Diffraction plot panel itself: light, with dark-encoding sequential
+    #   colormap so darker = stronger (single-crystal-software convention).
+    #   This is necessary because in linear mode the dominant Bragg peaks
+    #   compress all weak peaks toward the cmap floor; on a black plot bg
+    #   with a hot cmap that floor maps to "black on black" and weak peaks
+    #   become invisible.
     BG         = '#0d1117'
     PANEL      = '#161b22'
-    PLOT_BG    = '#000000'
+    PLOT_BG    = '#fafafa'   # light diffraction canvas
     ACCENT     = '#ff6b35'
     ACCENT_2   = '#4a90e2'
     TEXT       = '#e6edf3'
     TEXT_DIM   = '#8b949e'
     GRID       = '#21262d'
-    SPOT_CMAP  = 'hot'
+    # Plot-panel-only colors (must read against light PLOT_BG):
+    PLOT_TEXT      = '#1f2328'
+    PLOT_TEXT_DIM  = '#57606a'
+    PLOT_GRID      = '#d0d7de'
+    SPOT_EDGE      = '#1f2328'
+    ZERO_SPOT_FACE = '#c8102e'   # red 000 marker (visible on white)
+    SPOT_CMAP      = 'Blues'     # white -> dark blue (darker = stronger)
 
     def __init__(self, symbols=('Cs', 'Pb', 'Br'), a0=5.874, grid=(2, 2, 2)):
         self.symbols = list(symbols)
@@ -175,6 +195,9 @@ class TiltDiffractionSimulator:
         self.label_thresh  = 0.05
         self.log_scale     = True
         self.I_floor      = 1e-4
+        # Incoherent sum over 3 cubic-parent twin domains (c || x, y, z).
+        # Intended for a0a0c+/- where a cubic parent gives 3 orientations.
+        self.twin_3       = False
         # HKx layer selector: integer layer index in *supercell* Miller units.
         # For the default (2,2,2) grid this means half-integer steps in the
         # parent pseudocubic cell (layer=1 supercell ~ 0.5 parent).
@@ -264,6 +287,7 @@ class TiltDiffractionSimulator:
     def _update_I_max_ref(self):
         ref = self.calc.get_plane_reflections(
             self.zone_axis, self.h_max, self.d_min, I_min=0.0, layer=0,
+            twin=self.twin_3,
         )
         self.I_max_ref = max((r['I'] for r in ref), default=1.0)
 
@@ -271,6 +295,7 @@ class TiltDiffractionSimulator:
         self.reflections = self.calc.get_plane_reflections(
             self.zone_axis, self.h_max, self.d_min, self.I_min,
             layer=self.layer, I_max_ref=self.I_max_ref,
+            twin=self.twin_3,
         )
         self.reflections = self.calc.get_2d_coordinates(
             self.reflections, self.zone_axis, grid=self.grid,
@@ -351,7 +376,7 @@ class TiltDiffractionSimulator:
         ax_lbl.text(0, 0.5, 'Glazer tilt system  (sign pattern  ->  space group)',
                     color=self.TEXT, fontsize=10, fontweight='bold', va='center')
 
-        # Split into two columns of radio buttons to fit 18 entries
+        # Split into two columns of radio buttons to fit the 15 entries
         n = len(GLAZER_PRESETS)
         half = (n + 1) // 2
         col1 = GLAZER_PRESETS[:half]
@@ -464,7 +489,7 @@ class TiltDiffractionSimulator:
 
         # =======   HKx layer slider (integer, supercell units)   =======
         ax_layer = self.fig.add_axes([0.08, 0.14, 0.45, 0.020])
-        self.s_layer = Slider(ax_layer, 'HK_L layer (super)', -4, 4,
+        self.s_layer = Slider(ax_layer, 'HKL layer (super)', -4, 4,
                               valinit=self.layer, valstep=1,
                               color=self.ACCENT)
         self.s_layer.label.set_color(self.TEXT)
@@ -502,10 +527,13 @@ class TiltDiffractionSimulator:
         self.s_lthr.on_changed(self._on_lthr)
 
         # =======   Check boxes + buttons   =======
-        ax_chk = self.fig.add_axes([0.80, 0.140, 0.18, 0.045])
+        ax_chk = self.fig.add_axes([0.80, 0.140, 0.18, 0.065])
         ax_chk.set_facecolor(self.PANEL)
-        self.check = CheckButtons(ax_chk, ['Show hkl labels', 'log intensity'],
-                                  [self.show_labels, self.log_scale])
+        self.check = CheckButtons(
+            ax_chk,
+            ['Show hkl labels', 'log intensity', 'twin (3 domains)'],
+            [self.show_labels, self.log_scale, self.twin_3],
+        )
         for lbl in self.check.labels:
             lbl.set_color(self.TEXT); lbl.set_fontsize(8)
         self.check.on_clicked(self._on_check)
@@ -790,9 +818,19 @@ class TiltDiffractionSimulator:
     def _on_check(self, label):
         if 'labels' in label:
             self.show_labels = not self.show_labels
+            self._draw_pattern(); self.fig.canvas.draw_idle()
         elif 'log' in label:
             self.log_scale = not self.log_scale
-        self._draw_pattern(); self.fig.canvas.draw_idle()
+            self._draw_pattern(); self.fig.canvas.draw_idle()
+        elif 'twin' in label:
+            # Changing the twin state changes the intensities themselves
+            # (three-domain incoherent sum), so we need a full recompute,
+            # not just a redraw. Also refresh I_max_ref so normalisation
+            # stays consistent between twin-on and twin-off views.
+            self.twin_3 = not self.twin_3
+            self._update_I_max_ref()
+            self.recompute_pattern()
+            self._draw_pattern(); self.fig.canvas.draw_idle()
 
     def _set_status(self, msg, ok=True):
         """Flash a message in the top banner so the user sees save/export
@@ -885,23 +923,47 @@ class TiltDiffractionSimulator:
 
         if not self.reflections:
             self.ax.text(0.5, 0.5, 'no reflections pass d_min / I_min',
-                         color=self.TEXT_DIM, ha='center', va='center',
+                         color=self.PLOT_TEXT_DIM, ha='center', va='center',
                          transform=self.ax.transAxes)
         else:
             x = np.array([r['x'] for r in self.reflections])
             y = np.array([r['y'] for r in self.reflections])
             I = np.array([r['I_norm'] for r in self.reflections])
+
+            # Step 1: rescale intensity according to log/linear mode.
+            #   log mode  : Iplot is log-stretched to [0, 1] (already wide).
+            #   linear    : Iplot = I_norm directly (compresses heavily).
             if self.log_scale:
                 floor = max(self.I_floor, 1e-10)
-                Iplot = (np.log10(np.clip(I, floor, 1.0)) - np.log10(floor)) / (-np.log10(floor))
+                Iplot = (np.log10(np.clip(I, floor, 1.0)) - np.log10(floor)) \
+                        / (-np.log10(floor))
             else:
-                Iplot = I
-            sizes = self.spot_scale * np.sqrt(np.clip(Iplot, 0.04, 1.0)) + 6.0
+                Iplot = np.clip(I, 0.0, 1.0)
+
+            # Step 2: visual encoding. Both color and size grow with intensity.
+            # The dominant Bragg peaks usually have I_norm ~ 1 while super-
+            # lattice peaks have I_norm ~ 0.001 - 0.01, so in linear mode we
+            # apply a power-law compression (gamma = 0.4) to keep weak peaks
+            # discernible. In log mode Iplot is already well spread, no extra
+            # compression needed.
+            gamma = 1.0 if self.log_scale else 0.4
+            Iv = np.clip(Iplot, 1e-6, 1.0) ** gamma
+
+            # Color: clip to a minimum so the cmap never returns ~white
+            # (which would be invisible on the light plot panel).
+            Icolor = np.clip(Iv, 0.18, 1.0)
+            # Size: scales LINEARLY with Iv (no extra sqrt), so the
+            # diameter actually tracks intensity. At spot_scale = 250
+            # this gives ~3 px diameter for the weakest peaks (clipped
+            # at Iv = 0.02) up to ~16 px for the strongest -- about a
+            # 5x diameter range, visibly different at a glance. The
+            # spot_scale slider scales the whole range.
+            sizes = self.spot_scale * np.clip(Iv, 0.02, 1.0) + 6.0
 
             self.ax.scatter(
-                x, y, s=sizes, c=Iplot, cmap=self.SPOT_CMAP,
-                alpha=0.95, edgecolors='white', linewidths=0.25,
-                vmin=0, vmax=1,
+                x, y, s=sizes, c=Icolor, cmap=self.SPOT_CMAP,
+                alpha=0.95, edgecolors=self.SPOT_EDGE, linewidths=0.5,
+                vmin=0.0, vmax=1.0, zorder=5,
             )
 
             if self.show_labels:
@@ -912,15 +974,17 @@ class TiltDiffractionSimulator:
                             f"{_fmt_hkl(hp)},{_fmt_hkl(kp)},{_fmt_hkl(lp)}",
                             (r['x'], r['y']),
                             xytext=(3, 3), textcoords='offset points',
-                            fontsize=6, color='#c9d1d9', alpha=0.85,
+                            fontsize=6, color=self.PLOT_TEXT, alpha=0.85,
                         )
 
-        # central 000 spot
-        self.ax.scatter([0], [0], s=110, c='#58a6ff', marker='o',
-                        edgecolors='white', linewidths=2, zorder=10)
+        # central 000 spot (always drawn, so the user can locate the origin
+        # even when no reflection is at 000). Red on white = unambiguous.
+        self.ax.scatter([0], [0], s=110, c=self.ZERO_SPOT_FACE, marker='o',
+                        edgecolors=self.SPOT_EDGE, linewidths=1.0, zorder=10)
         self.ax.annotate('000', (0, 0), xytext=(6, 6),
                          textcoords='offset points',
-                         color='#58a6ff', fontsize=8, fontweight='bold')
+                         color=self.ZERO_SPOT_FACE, fontsize=8,
+                         fontweight='bold')
 
         za = ''.join(str(i) for i in self.zone_axis)
         self.ax.set_title(
@@ -928,19 +992,20 @@ class TiltDiffractionSimulator:
             f"   .   Glazer {self.glazer}   .   "
             f"omega = ({self.omega_deg[0]:.2f}, {self.omega_deg[1]:.2f}, "
             f"{self.omega_deg[2]:.2f}) deg",
-            color=self.TEXT, fontsize=11, pad=10,
+            color=self.PLOT_TEXT, fontsize=11, pad=10,
         )
         self.ax.set_aspect('equal')
-        self.ax.grid(True, color=self.GRID, alpha=0.5, linestyle='-', linewidth=0.4)
-        self.ax.axhline(0, color=self.GRID, linewidth=0.6)
-        self.ax.axvline(0, color=self.GRID, linewidth=0.6)
-        self.ax.tick_params(colors=self.TEXT_DIM, labelsize=8)
+        self.ax.grid(True, color=self.PLOT_GRID, alpha=0.8,
+                     linestyle='-', linewidth=0.5)
+        self.ax.axhline(0, color=self.PLOT_GRID, linewidth=0.8)
+        self.ax.axvline(0, color=self.PLOT_GRID, linewidth=0.8)
+        self.ax.tick_params(colors=self.PLOT_TEXT_DIM, labelsize=8)
         for s in self.ax.spines.values():
-            s.set_color(self.GRID)
+            s.set_color(self.PLOT_GRID)
         self.ax.set_xlabel('reciprocal lattice (parent pseudocubic)',
-                           color=self.TEXT_DIM)
+                           color=self.PLOT_TEXT_DIM)
         self.ax.set_ylabel('reciprocal lattice (parent pseudocubic)',
-                           color=self.TEXT_DIM)
+                           color=self.PLOT_TEXT_DIM)
 
     def _draw_info(self):
         self.info_ax.clear()

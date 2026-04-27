@@ -26,4 +26,12 @@ diffraction_*.png
 diffraction_*.csv
 powder_*.png
 powder_*.csv
+reflections_*.txt
+matrix_*.npy
+matrix_*.csv
+matrix_*_meta.txt
 pytilt_live.cif
+
+# Local-only README HTML preview helper (not for the public repo)
+docs/_preview_readme.py
+docs/README_preview.html
