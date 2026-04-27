@@ -138,42 +138,70 @@ def get_scattering_factor(element, s):
 # CIF PARSER
 # =============================================================================
 
+def _cif_float(value, default=0.0):
+    """Parse a CIF numeric value, robust to:
+      - crystallographic e.s.d. notation: '0.51235(14)' -> 0.51235
+      - placeholders for unknown / not-applicable: '?', '.', '' -> default
+      - leading / trailing whitespace
+    """
+    if value is None:
+        return default
+    s = str(value).strip()
+    if s in ('', '?', '.'):
+        return default
+    # Strip the parenthesised standard uncertainty, e.g. '0.51235(14)'.
+    if '(' in s:
+        s = s.split('(', 1)[0]
+    try:
+        return float(s)
+    except ValueError:
+        return default
+
+
 class CIFParser:
     """Parse CIF files to extract crystal structure."""
-    
+
     def __init__(self, filename):
         self.filename = filename
         self.cell_params = {}
         self.atoms = []
         self.space_group = "P 1"
         self._parse()
-    
+
     def _parse(self):
         with open(self.filename, 'r') as f:
             content = f.read()
-        
-        # Cell parameters
+
+        # Cell parameters. Use \S+ then _cif_float so values like
+        # '7.901931(14)' (with crystallographic e.s.d.) parse correctly.
         patterns = {
-            'a': r'_cell_length_a\s+([0-9.]+)',
-            'b': r'_cell_length_b\s+([0-9.]+)',
-            'c': r'_cell_length_c\s+([0-9.]+)',
-            'alpha': r'_cell_angle_alpha\s+([0-9.]+)',
-            'beta': r'_cell_angle_beta\s+([0-9.]+)',
-            'gamma': r'_cell_angle_gamma\s+([0-9.]+)',
+            'a':     r'_cell_length_a\s+(\S+)',
+            'b':     r'_cell_length_b\s+(\S+)',
+            'c':     r'_cell_length_c\s+(\S+)',
+            'alpha': r'_cell_angle_alpha\s+(\S+)',
+            'beta':  r'_cell_angle_beta\s+(\S+)',
+            'gamma': r'_cell_angle_gamma\s+(\S+)',
         }
         for param, pattern in patterns.items():
             match = re.search(pattern, content)
             if match:
-                self.cell_params[param] = float(match.group(1))
-        
-        # Space group
-        sg_match = re.search(r'_space_group_name_H-M_alt\s+"([^"]+)"', content)
+                self.cell_params[param] = _cif_float(match.group(1))
+
+        # Space group. Try both modern (_space_group_name_H-M_alt) and
+        # legacy (_symmetry_space_group_name_H-M) keys, in either quoted
+        # ('Pnma' / "Pnma") or unquoted form. Capture to end-of-line and
+        # then strip any quotes / whitespace.
+        sg_match = re.search(
+            r"_(?:space_group_name_H-M_alt|symmetry_space_group_name_H-M)"
+            r"\s+(.+)$",
+            content, flags=re.MULTILINE,
+        )
         if sg_match:
-            self.space_group = sg_match.group(1)
-        
+            self.space_group = sg_match.group(1).strip().strip("'\"")
+
         # Atoms
         self._parse_atoms(content)
-    
+
     def _parse_atoms(self, content):
         atom_loop = re.search(
             r'loop_\s*\n((?:\s*_atom_site_\w+\s*\n)+)((?:(?!\s*loop_|\s*_).*\n?)*)',
@@ -181,10 +209,10 @@ class CIFParser:
         )
         if not atom_loop:
             return
-        
+
         headers = re.findall(r'_atom_site_(\w+)', atom_loop.group(1))
         data = atom_loop.group(2).strip()
-        
+
         for line in data.split('\n'):
             line = line.strip()
             if not line or line.startswith('_') or line.startswith('loop_'):
@@ -195,11 +223,12 @@ class CIFParser:
                 self.atoms.append({
                     'symbol': atom.get('type_symbol', atom.get('label', 'X')[:2].rstrip('0123456789')),
                     'label': atom.get('label', ''),
-                    'x': float(atom.get('fract_x', 0)),
-                    'y': float(atom.get('fract_y', 0)),
-                    'z': float(atom.get('fract_z', 0)),
-                    'occupancy': float(atom.get('occupancy', 1.0)),
-                    'B_iso': float(atom.get('B_iso_or_equiv', 0)) if 'B_iso_or_equiv' in atom else 0,
+                    'x':         _cif_float(atom.get('fract_x'),    default=0.0),
+                    'y':         _cif_float(atom.get('fract_y'),    default=0.0),
+                    'z':         _cif_float(atom.get('fract_z'),    default=0.0),
+                    'occupancy': _cif_float(atom.get('occupancy'),  default=1.0),
+                    'B_iso':     _cif_float(atom.get('B_iso_or_equiv'),
+                                            default=0.0),
                 })
     
     def get_cell_matrix(self):
