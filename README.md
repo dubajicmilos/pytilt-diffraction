@@ -202,6 +202,11 @@ This project depends on and redistributes pytilting, which is licensed
 under GPL v2. This project is therefore distributed under GPL v2 or later
 (see `LICENSE`). Any redistribution must preserve `vendor/pytilting/LICENSE`.
 
+pytilt-diffraction builds on pytilting; its authors ask users to cite:
+N. Xie, J. Zhang, S. Raza, N. Zhang, X. Chen and D. Wang, "Generation of
+low-symmetry perovskite structures for ab initio computation", J. Phys.:
+Condens. Matter 32, 315901 (2020). https://doi.org/10.1088/1361-648X/ab7f6a
+
 ## Validation
 
 The `DiffractionCalculator` has been cross-checked against
